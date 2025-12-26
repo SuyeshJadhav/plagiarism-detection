@@ -1,4 +1,5 @@
 import re
+import logging
 import nltk # type: ignore
 from nltk.stem import WordNetLemmatizer # type: ignore
 from sklearn.feature_extraction.text import TfidfVectorizer # type: ignore
@@ -11,6 +12,8 @@ from typing import List, Tuple
 import torch # type: ignore
 from nltk.corpus import stopwords # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+logger = logging.getLogger("LY-PROJECT")
 
 
 class GetPapers:
@@ -25,7 +28,7 @@ class GetPapers:
             return paper1_content, paper2_content
 
         except Exception as e:
-            print(f'Error reading files: {e}')
+            logger.error(f'Error reading files: {e}')
             return None, None
 
 
@@ -75,12 +78,12 @@ class Preprocessor:
             if match:
                 content = match.group(1).strip()
                 if content:
-                    print(f"\n✅ Found {section.upper()}: {len(content)} chars")
+                    logger.debug(f"Found {section.upper()}: {len(content)} chars")
                     sections[section] = content
                 else:
-                    print(f"\n❌ Empty {section.upper()} section")
+                    logger.debug(f"Empty {section.upper()} section")
             else:
-                print(f"\n❌ No {section.upper()} section found")
+                logger.debug(f"No {section.upper()} section found")
 
         return sections   
     
@@ -97,7 +100,7 @@ class Preprocessor:
             ]
             return ' '.join(processed_tokens)
         except Exception as e:
-            print(f"Error during preprocessing: {e}")
+            logger.error(f"Error during preprocessing: {e}")
             return ''
 
 
@@ -138,7 +141,7 @@ class SimilarityCalculator:
                     sim = future.result()
                     similarities.append(sim)
                 except Exception as e:
-                    print(f"Error in chunk similarity calculation: {e}")
+                    logger.error(f"Error in chunk similarity calculation: {e}")
                     similarities.append(0.0)
 
         avg_similarity = np.mean(similarities) if similarities else 0.0
@@ -151,7 +154,7 @@ class SimilarityCalculator:
                 [embeddings[0]], [embeddings[1]])[0][0]
             return similarity_score
         except Exception as e:
-            print(f"Error in BERT similarity calculation for chunk: {e}")
+            logger.error(f"Error in BERT similarity calculation for chunk: {e}")
             return 0.0
 
     def combined_similarity(self, text1, text2, tfidf_weight=0.3, bert_weight=0.7):
@@ -296,7 +299,18 @@ class PlagiarismDetector:
             }
 
 
-def research_similarity(path1, path2):
+def research_similarity(path1, path2, similarity_threshold: float = 0.65):
+    """
+    Compute similarity between two documents.
+    
+    Args:
+        path1: Path to first document (markdown)
+        path2: Path to second document (markdown)
+        similarity_threshold: Threshold for plagiarism detection (default: 0.65)
+        
+    Returns:
+        dict with similarity scores and plagiarized content
+    """
     get_papers = GetPapers()
     detector = PlagiarismDetector()
     preprocessor = Preprocessor()
@@ -305,21 +319,20 @@ def research_similarity(path1, path2):
     paper1, paper2 = get_papers.load_papers(path1, path2)
 
     if not paper1 or not paper2:
-        print("Error loading papers")
-        return
+        logger.error("Error loading papers")
+        return None
     
-    plagiarism_results = detector.get_plagiarized_sentences(paper1, paper2)
+    plagiarism_results = detector.get_plagiarized_sentences(paper1, paper2, similarity_threshold)
 
     sections_paper1 = preprocessor.extract_sections(paper1)
     sections_paper2 = preprocessor.extract_sections(paper2)
 
     if not sections_paper1 or not sections_paper2:
-        print("Error extracting sections")
-        return
+        logger.error("Error extracting sections")
+        return None
 
 
-    print('Similarity Score by Sections')
-    print('-'*30)
+    logger.info('Computing similarity scores by sections')
 
     for section in sections_paper1.keys():
         text1 = preprocessor.preprocess_text(sections_paper1[section])
@@ -333,13 +346,12 @@ def research_similarity(path1, path2):
             bert_score = similarity_calculator.calculate_transformer_similarity(
                 text1, text2)
             
-            print(
+            logger.debug(
                 f"{section.capitalize():<15} : Combined Score: {combined_score:.4f}")
-            print(f"Individual Scores: TF-IDF: {individual_scores['TF-IDF']:.4f}, "
+            logger.debug(f"Individual Scores: TF-IDF: {individual_scores['TF-IDF']:.4f}, "
                   f"BERT: {individual_scores['BERT']:.4f}")
         else:
-            print(f"{section.capitalize():<15} : No content available")
-        print()
+            logger.debug(f"{section.capitalize():<15} : No content available")
 
     return {
             "data": {

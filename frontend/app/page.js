@@ -4,7 +4,7 @@ import Link from "next/link"
 
 export default function LandingPage() {
 
-  
+
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
@@ -33,13 +33,6 @@ export default function LandingPage() {
               >
                 <Link href="/pages/submission">Check Document</Link>
               </Button>
-              {/* <Button
-                variant="outline"
-                size="lg"
-                className="h-14 px-8 text-lg border-2 rounded-md"
-              >
-                Learn More
-              </Button> */}
             </div>
           </div>
         </div>

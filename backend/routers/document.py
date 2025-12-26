@@ -13,7 +13,9 @@ from .utils import (
     detect_ai_generated_content, 
     detect_similarity, 
     read_md_file, 
-    scrape_and_save_research_papers
+    scrape_and_save_research_papers,
+    build_search_query,
+    get_similarity_threshold
 )
 from .logger import logger
 from database import document_collection
@@ -111,19 +113,26 @@ async def process_document(document_id: str, token_data: dict = Depends(verify_t
         logger.error(f"Markdown conversion failed: {e}")
         return JSONResponse(content={"error": f"Markdown conversion failed: {e}"}, status_code=500)
 
-    # Step 2: Read Markdown file and extract title.
+    # Step 2: Read Markdown file and extract title + build search query.
     try:
         md_content = await asyncio.to_thread(read_md_file, standardized_md_path)
         title = md_content.split("\n")[0].replace("#", "").strip()
         logger.info("Title extracted from Markdown: %s", title)
+        
+        # Build optimized search query from keywords
+        search_query = build_search_query(md_content, title)
     except Exception as e:
         logger.error(f"Error reading Markdown file: {e}")
         return JSONResponse(content={"error": f"Failed to read Markdown: {e}"}, status_code=500)
 
-    # Step 3: Scrape research papers using the title.
+    # Step 3: Scrape research papers using keyword-based search.
     try:
-        # If scrape_and_save_research_papers is async, await it directly.
-        scraped_paper_details = await scrape_and_save_research_papers(title)
+        # Get document type for threshold configuration
+        doc_type = document.get("doc_type", "default")
+        similarity_threshold = get_similarity_threshold(doc_type)
+        
+        # Use keyword-based search instead of just title
+        scraped_paper_details = await scrape_and_save_research_papers(search_query, max_results=5)
         logger.info("Scraped %d papers", len(scraped_paper_details))
     except Exception as e:
         logger.error(f"Error during scraping: {e}")
@@ -151,9 +160,9 @@ async def process_document(document_id: str, token_data: dict = Depends(verify_t
     try:
         # If detect_ai_generated_content is synchronous (returns a list), wrap with asyncio.to_thread.
         ai_score = await asyncio.to_thread(detect_ai_generated_content, standardized_md_path)
-        # Offload similarity detection concurrently.
+        # Offload similarity detection concurrently with configurable threshold.
         similarity_tasks = [
-            asyncio.to_thread(detect_similarity, standardized_md_path, paper["md_path"], paper)
+            asyncio.to_thread(detect_similarity, standardized_md_path, paper["md_path"], paper, similarity_threshold)
             for paper in scraped_paper_details
         ]
         text_similarity_scores = await asyncio.gather(*similarity_tasks, return_exceptions=True)

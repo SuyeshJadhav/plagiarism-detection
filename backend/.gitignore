@@ -13,3 +13,15 @@
 /nlp/documents/*
 
 /logs
+
+# Additional Python files
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/

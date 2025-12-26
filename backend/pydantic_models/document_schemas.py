@@ -26,7 +26,7 @@ class Similarity(BaseModel):
       
 class Document(BaseModel):
       id: Optional[PyObjectId] = Field(alias="_id", default=None)
-      user_id: Optional[PyObjectId] = Field(alias="_id", default=None)
+      user_id: Optional[PyObjectId] = Field(alias="user_id", default=None)
       name: str
       path: str
       md_path: Optional[str] = None
